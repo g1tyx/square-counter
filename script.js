@@ -17,9 +17,9 @@ let gigaSquaresUnclaimed = 0n;
 let darkModeEnabled = false;
 let purchaseMax = false;
 let resetTimeoutCallback = () => { confirmReset = false; document.getElementById("reset-button").innerHTML = "Reset"; };
-let glowCounters = Array.from({length: 2 ** 4 ** 2}, () => ({counter: 0, lastColor: "", lastFill: "", minerOccupied: false}));
-let glowCountersMega = Array.from({length: 2 ** 2 ** 2}, () => ({counter: 0, lastColor: "", lastFill: ""}));
-let glowCountersUltra = Array.from({length: 2 ** 2 ** 2}, () => ({counter: 0, lastColor: "", lastFill: ""}));
+let glowCounters = []; 
+let glowCountersMega = [];
+let glowCountersUltra = [];
 let lastUpdatedTime = Date.now();
 let didUpgrade = false;
 let currentTime = 0;
@@ -31,6 +31,10 @@ let startingBoardBitFlippedDate = 0;
 let boardScoreBinary = "";
 let ultraSquaresTotal = 0n;
 let maxUltraSquares = 0n;
+let upgrades = {};
+let autobuyers = {};
+let miners = [];
+let inSimulation = false;
 
 const STATUS_STANDBY = -1
 const STATUS_STOP = -2
@@ -78,28 +82,65 @@ function init() {
     gigaSquaresUnlocked = false;
     darkModeEnabled = false;
     purchaseMax = false;
-    
-    Object.values(upgrades).forEach(upgrade => {
-        upgrade.level = 1n;
-    });
-    
-    Object.values(autobuyers).forEach(autobuyer => {
-        autobuyer.reset();
-    });
+    inSimulation = false;
+
+    upgrades = {
+        "dimensions": new Upgrade("dimensions"),
+        "speed": new Upgrade("speed"),
+        "value": new Upgrade("value"),
+        "minerCount": new Upgrade("minerCount"),
+        "minerSpeed": new Upgrade("minerSpeed"),
+        "speedFactor": new Upgrade("speedFactor"),
+        "minerSpeedFactor": new Upgrade("minerSpeedFactor"),
+        "upgradeAutoPurchaser": new Upgrade("upgradeAutoPurchaser"),
+        "dimensionsAutoPurchaser": new Upgrade("dimensionsAutoPurchaser"),
+        "squaresAutoClaimer": new Upgrade("squaresAutoClaimer"),
+        "megasquaresAutoClaimer": new Upgrade("megasquaresAutoClaimer"),
+        "startingSquares": new Upgrade("startingSquares"),
+        "timerSpeedBonus": new Upgrade("timerSpeedBonus"),
+        "gigaBoardUnlocked": new Upgrade("gigaBoardUnlocked"),
+        "gigaBoardCounter": new Upgrade("gigaBoardCounter"),
+        "gigaBoardAutoIncrement": new Upgrade("gigaBoardAutoIncrement"),
+        "megaSquaresMultiplier": new Upgrade("megaSquaresMultiplier"),
+        "megaStartingLevel": new Upgrade("megaStartingLevel"),
+        "megaUpgradeAutoPurchaser": new Upgrade("megaUpgradeAutoPurchaser"),
+        "gigaBoardAutoIncrementAmount": new Upgrade("gigaBoardAutoIncrementAmount"),
+        "dimensionsMax": new Upgrade("dimensionsMax"),
+        "speedFactorBonus": new Upgrade("speedFactorBonus"),
+        "ultraBoardUnlocked": new Upgrade("ultraBoardUnlocked"),
+        "ultraBoardCounter": new Upgrade("ultraBoardCounter"),
+        "ultraBoardDimensions": new Upgrade("ultraBoardDimensions"),
+        "ultraBoardHarvestSpeed": new Upgrade("ultraBoardHarvestSpeed"),
+        "ultraBoardHarvestValue": new Upgrade("ultraBoardHarvestValue"),
+        "ultraBoardIncrementAmount": new Upgrade("ultraBoardIncrementAmount"),
+        "ultraBoardMegaSquaresBonusMultiplier": new Upgrade("ultraBoardMegaSquaresBonusMultiplier"),
+        "ultraBoardAutoIncrement": new Upgrade("ultraBoardAutoIncrement"),
+    };
+
+    autobuyers = {
+        "megasquaresAutoClaimer": new Autobuyer("megasquaresAutoClaimer"),
+        "dimensionsAutoPurchaser": new Autobuyer("dimensionsAutoPurchaser"),
+        "squaresAutoClaimer": new Autobuyer("squaresAutoClaimer"),
+        "upgradeAutoPurchaser": new Autobuyer("upgradeAutoPurchaser"),
+        "gigaBoardAutoIncrement": new Autobuyer("gigaBoardAutoIncrement"),
+        "megaUpgradeAutoPurchaser": new Autobuyer("megaUpgradeAutoPurchaser"),
+        "ultraBoardHarvestSpeed": new Autobuyer("ultraBoardHarvestSpeed"),
+        "ultraBoardAutoIncrement": new Autobuyer("ultraBoardAutoIncrement"),
+    };
 
     miners = [];
-    
-    updateButtons();
-    updateUpgradeTexts();
-    updateScores();
-
-    save();
 
     glowCounters = Array.from({length: 2 ** 4 ** 2}, () => ({counter: 0, lastColor: "", lastFill: "", minerOccupied: false}));
     glowCountersMega = Array.from({length: 2 ** 2 ** 2}, () => ({counter: 0, lastColor: "", lastFill: ""}));    
     glowCountersUltra = Array.from({length: 2 ** 2 ** 2}, () => ({counter: 0, lastColor: "", lastFill: ""}));
 
     lastUpdatedTime = Date.now();
+    
+    document.getElementById("squaresAutoClaimerInput").value = 0;
+    
+    updateButtons();
+    updateUpgradeTexts();
+    updateScores();
 }
 
 function save() {
@@ -332,7 +373,7 @@ class Upgrade {
                         totalPrice += (this.level + i) < this.maxLevel ? 10n ** 11n * 3n ** (level + i) : 0n; 
                         break;
                     case "speedFactor":
-                        totalPrice += (this.level + i) < this.maxLevel ? BigInt(Math.floor(1.35 ** (Number(level + i)))) + 1n : 0n;
+                        totalPrice += (this.level == 1n ? 1n : ((this.level + i) < this.maxLevel ? BigInt(Math.floor(1.35 ** (Number(level + i)))) + 1n : 0n));
                         break;
                     case "minerSpeedFactor":
                         totalPrice += (this.level + i) < this.maxLevel ? BigInt(Math.floor(1.3 ** (Number(level + i)))) / 4n + 1n : 0n;
@@ -739,40 +780,6 @@ class Upgrade {
     }
 };
 
-let upgrades = {
-    "dimensions": new Upgrade("dimensions"),
-    "speed": new Upgrade("speed"),
-    "value": new Upgrade("value"),
-    "minerCount": new Upgrade("minerCount"),
-    "minerSpeed": new Upgrade("minerSpeed"),
-    "speedFactor": new Upgrade("speedFactor"),
-    "minerSpeedFactor": new Upgrade("minerSpeedFactor"),
-    "upgradeAutoPurchaser": new Upgrade("upgradeAutoPurchaser"),
-    "dimensionsAutoPurchaser": new Upgrade("dimensionsAutoPurchaser"),
-    "squaresAutoClaimer": new Upgrade("squaresAutoClaimer"),
-    "megasquaresAutoClaimer": new Upgrade("megasquaresAutoClaimer"),
-    "startingSquares": new Upgrade("startingSquares"),
-    "timerSpeedBonus": new Upgrade("timerSpeedBonus"),
-    "gigaBoardUnlocked": new Upgrade("gigaBoardUnlocked"),
-    "gigaBoardCounter": new Upgrade("gigaBoardCounter"),
-    "gigaBoardAutoIncrement": new Upgrade("gigaBoardAutoIncrement"),
-    "megaSquaresMultiplier": new Upgrade("megaSquaresMultiplier"),
-    "megaStartingLevel": new Upgrade("megaStartingLevel"),
-    "megaUpgradeAutoPurchaser": new Upgrade("megaUpgradeAutoPurchaser"),
-    "gigaBoardAutoIncrementAmount": new Upgrade("gigaBoardAutoIncrementAmount"),
-    "dimensionsMax": new Upgrade("dimensionsMax"),
-    "speedFactorBonus": new Upgrade("speedFactorBonus"),
-    "ultraBoardUnlocked": new Upgrade("ultraBoardUnlocked"),
-    "ultraBoardCounter": new Upgrade("ultraBoardCounter"),
-    "ultraBoardDimensions": new Upgrade("ultraBoardDimensions"),
-    "ultraBoardHarvestSpeed": new Upgrade("ultraBoardHarvestSpeed"),
-    "ultraBoardHarvestValue": new Upgrade("ultraBoardHarvestValue"),
-    "ultraBoardIncrementAmount": new Upgrade("ultraBoardIncrementAmount"),
-    "ultraBoardMegaSquaresBonusMultiplier": new Upgrade("ultraBoardMegaSquaresBonusMultiplier"),
-    "ultraBoardAutoIncrement": new Upgrade("ultraBoardAutoIncrement"),
-};
-
-let minerPositions = new Array();
 let spacesFullCurrentIteration = 0;
 let minerLastCheckedPosition = 0;
 class Miner {
@@ -858,8 +865,6 @@ class Miner {
     }
 };
 
-let miners = [];
-
 class Autobuyer {
     constructor(type) {
         this.type = type;
@@ -909,7 +914,7 @@ class Autobuyer {
                     }
                     break;
                 case "squaresAutoClaimer":
-                    if(this.enabled && squaresUnclaimed > lastClaimAmount * squaresAutoClaimFactorThisIteration) {
+                    if(this.enabled && (squaresUnclaimed/10n > lastClaimAmount * squaresAutoClaimFactorThisIteration)) {
                         lastClaimAmount = squaresUnclaimed / 100n;
                         claimSquares();
                         this.reset();
@@ -982,17 +987,6 @@ class Autobuyer {
     }
 }
 
-let autobuyers = {
-    "megasquaresAutoClaimer": new Autobuyer("megasquaresAutoClaimer"),
-    "dimensionsAutoPurchaser": new Autobuyer("dimensionsAutoPurchaser"),
-    "squaresAutoClaimer": new Autobuyer("squaresAutoClaimer"),
-    "upgradeAutoPurchaser": new Autobuyer("upgradeAutoPurchaser"),
-    "gigaBoardAutoIncrement": new Autobuyer("gigaBoardAutoIncrement"),
-    "megaUpgradeAutoPurchaser": new Autobuyer("megaUpgradeAutoPurchaser"),
-    "ultraBoardHarvestSpeed": new Autobuyer("ultraBoardHarvestSpeed"),
-    "ultraBoardAutoIncrement": new Autobuyer("ultraBoardAutoIncrement"),
-};
-
 function getMaxBoardScore() {
     let dimensions = upgrades["dimensions"].getValue();
     return (2n ** (dimensions * dimensions) - 1n) * 100n;
@@ -1010,7 +1004,9 @@ function getUnclaimedGigasquares() {
     return upgrades["gigaBoardCounter"].getValue() / BigInt(getMaxGigaBoardScore());
 }
 
-let inSimulation = false;
+// BEGIN MAIN
+
+init();
 
 if(localStorage["saveExists"] == "true") {
     load();
@@ -1024,8 +1020,6 @@ updateUpgradeTexts();
 maxMegaSquares = megaSquaresTotal > maxMegaSquares ? megaSquaresTotal : maxMegaSquares;
 maxGigaSquares = (gigaSquaresTotal + getUnclaimedGigasquares()) > maxGigaSquares ? (gigaSquaresTotal + getUnclaimedGigasquares()) : maxGigaSquares;
 maxUltraSquares = ultraSquaresTotal > maxUltraSquares ? ultraSquaresTotal : maxUltraSquares;
-
-document.getElementById("squaresAutoClaimerInput").value = 0;
 
 Object.values(autobuyers).forEach(autobuyer => {
     if(["ultraBoardHarvestSpeed"].includes(autobuyer.type)) {
@@ -1088,7 +1082,9 @@ setInterval(function() {
 
 setInterval(() => {
     save();
-}, 10 * 1000);
+}, 5 * 1000);
+
+// END MAIN
 
 function increment() {
     let maxBoardScore = getMaxBoardScore();
@@ -1508,6 +1504,7 @@ function claimSquares() {
     squaresUnclaimed = 0n;
     boardScore = 0n;
 
+    redrawSquares = true;
     didUpgrade = true;
 }
 
@@ -1657,6 +1654,7 @@ function doUpgrade(type) {
         upgrade.level += 1n;
         redrawSquares = true;
         glowCounters = Array.from({length: Number(upgrades["dimensions"].getValue(upgrades["dimensions"].maxLevel + upgrades["dimensionsMax"].getValue())) ** 2}, () => ({counter: 0, lastColor: "", lastFill: "", minerOccupied: false}));
+        startingBoardBitFlippedDate = 0;
         resetMiners();
     }
     else if(type == "minerCount") {
